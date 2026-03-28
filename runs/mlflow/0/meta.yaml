@@ -1,7 +1,0 @@
-artifact_location: file:///E:/yolo-mlops-pipeline/runs/mlflow/0
-creation_time: 1774656699058
-experiment_id: '0'
-last_update_time: 1774656699058
-lifecycle_stage: active
-name: Default
-workspace: default
