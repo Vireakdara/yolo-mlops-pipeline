@@ -25,7 +25,7 @@ jobs:
       run: python src/train.py
 
     - name: Upload MLflow artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: mlruns
         path: mlruns/
