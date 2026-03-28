@@ -1,9 +1,11 @@
 import mlflow
-import mlflow.pytorch
 from ultralytics import YOLO
+from ultralytics import settings
 import argparse
 
-def run_inference(image_path: str, model_path: str = "yolov8n.pt"):
+settings.update({"mlflow": False})
+
+def run_inference(image_path: str, model_path: str = "runs\\detect\\train3\\weights\\best.pt"):
     mlflow.set_experiment("yolo-mlops")
 
     with mlflow.start_run(run_name="inference"):
@@ -16,12 +18,14 @@ def run_inference(image_path: str, model_path: str = "yolov8n.pt"):
 
         print(f"Detections: {len(results[0].boxes)}")
         for box in results[0].boxes:
-            print(f"  Class: {int(box.cls)} | Confidence: {float(box.conf):.2f}")
+            cls = int(box.cls)
+            conf = float(box.conf)
+            print(f"  Class: {cls} | Confidence: {conf:.2f}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", required=True, help="Path to image")
-    parser.add_argument("--model", default="yolov8n.pt", help="Model path")
+    parser.add_argument("--model", default="runs\\detect\\train3\\weights\\best.pt", help="Model path")
     args = parser.parse_args()
 
     run_inference(args.image, args.model)
