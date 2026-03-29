@@ -1,4 +1,6 @@
 from fastapi import FastAPI, UploadFile, File
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from ultralytics import YOLO
 from ultralytics import settings
 import uvicorn
@@ -10,11 +12,13 @@ settings.update({"mlflow": False})
 
 app = FastAPI(title="YOLO Object Detection API")
 
-model = YOLO("yolov8n.pt")
+app.mount("/static", StaticFiles(directory="src/static"), name="static")
 
 @app.get("/")
 def root():
-    return {"message": "YOLO Object Detection API", "status": "running"}
+    return FileResponse("src/static/index.html")
+
+model = YOLO("yolov8n.pt")
 
 @app.post("/detect")
 async def detect(file: UploadFile = File(...)):

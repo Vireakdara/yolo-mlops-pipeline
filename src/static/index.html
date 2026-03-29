@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLO Object Detection</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #0f0f0f;
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 8px;
+            background: linear-gradient(90deg, #00ff88, #00aaff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        p.subtitle {
+            color: #888;
+            margin-bottom: 40px;
+            font-size: 0.95rem;
+        }
+
+        .upload-area {
+            width: 100%;
+            max-width: 600px;
+            border: 2px dashed #333;
+            border-radius: 16px;
+            padding: 60px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #1a1a1a;
+            margin-bottom: 20px;
+        }
+
+        .upload-area:hover, .upload-area.dragover {
+            border-color: #00ff88;
+            background: #1a2a1a;
+        }
+
+        .upload-area p {
+            color: #888;
+            font-size: 1rem;
+        }
+
+        .upload-area span {
+            color: #00ff88;
+            font-weight: bold;
+        }
+
+        input[type="file"] { display: none; }
+
+        .btn-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 40px;
+        }
+
+        button {
+            border: none;
+            padding: 14px 40px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.3s;
+        }
+
+        #detectBtn {
+            background: linear-gradient(90deg, #00ff88, #00aaff);
+            color: #000;
+        }
+
+        #detectBtn:hover { opacity: 0.85; }
+        #detectBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        #clearBtn {
+            background: #2a2a2a;
+            color: #fff;
+            display: none;
+            border: 1px solid #444;
+        }
+
+        #clearBtn:hover { background: #333; }
+
+        .preview-container {
+            width: 100%;
+            max-width: 600px;
+            margin-bottom: 30px;
+            position: relative;
+        }
+
+        canvas {
+            width: 100%;
+            border-radius: 12px;
+            display: none;
+        }
+
+        .results {
+            width: 100%;
+            max-width: 600px;
+        }
+
+        .results h2 {
+            font-size: 1.2rem;
+            margin-bottom: 16px;
+            color: #00ff88;
+        }
+
+        .detection-item {
+            background: #1a1a1a;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 3px solid #00ff88;
+        }
+
+        .class-name {
+            font-weight: bold;
+            text-transform: capitalize;
+        }
+
+        .confidence {
+            color: #00aaff;
+            font-size: 0.9rem;
+        }
+
+        .loading {
+            color: #888;
+            font-size: 1rem;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .error {
+            color: #ff4444;
+            margin: 10px 0;
+            display: none;
+        }
+
+        .stats {
+            background: #1a1a1a;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+            display: none;
+            width: 100%;
+            max-width: 600px;
+        }
+
+        .stats p { color: #888; font-size: 0.9rem; }
+        .stats span { color: #fff; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>YOLO Object Detection</h1>
+    <p class="subtitle">Upload an image to detect objects using YOLOv8</p>
+
+    <div class="upload-area" id="uploadArea">
+        <p>Drag & drop an image here or <span>click to upload</span></p>
+        <input type="file" id="fileInput" accept="image/*">
+    </div>
+
+    <div class="btn-row">
+        <button id="detectBtn" disabled>Detect Objects</button>
+        <button id="clearBtn">Clear</button>
+    </div>
+
+    <div class="loading" id="loading">Detecting objects...</div>
+    <div class="error" id="error"></div>
+
+    <div class="preview-container">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <div class="stats" id="stats">
+        <p>Total detections: <span id="totalDetections">0</span></p>
+    </div>
+
+    <div class="results" id="results"></div>
+
+    <script>
+        const COCO_CLASSES = {
+            0: 'person', 1: 'bicycle', 2: 'car', 3: 'motorcycle', 4: 'airplane',
+            5: 'bus', 6: 'train', 7: 'truck', 8: 'boat', 9: 'traffic light',
+            10: 'fire hydrant', 11: 'stop sign', 12: 'parking meter', 13: 'bench',
+            14: 'bird', 15: 'cat', 16: 'dog', 17: 'horse', 18: 'sheep', 19: 'cow',
+            20: 'elephant', 21: 'bear', 22: 'zebra', 23: 'giraffe', 24: 'backpack',
+            25: 'umbrella', 26: 'handbag', 27: 'tie', 28: 'suitcase', 29: 'frisbee',
+            30: 'skis', 31: 'snowboard', 32: 'sports ball', 33: 'kite', 34: 'baseball bat',
+            35: 'baseball glove', 36: 'skateboard', 37: 'surfboard', 38: 'tennis racket',
+            39: 'bottle', 40: 'wine glass', 41: 'cup', 42: 'fork', 43: 'knife',
+            44: 'spoon', 45: 'bowl', 46: 'banana', 47: 'apple', 48: 'sandwich',
+            49: 'orange', 50: 'broccoli', 51: 'carrot', 52: 'hot dog', 53: 'pizza',
+            54: 'donut', 55: 'cake', 56: 'chair', 57: 'couch', 58: 'potted plant',
+            59: 'bed', 60: 'dining table', 61: 'toilet', 62: 'tv', 63: 'laptop',
+            64: 'mouse', 65: 'remote', 66: 'keyboard', 67: 'cell phone', 68: 'microwave',
+            69: 'oven', 70: 'toaster', 71: 'sink', 72: 'refrigerator', 73: 'book',
+            74: 'clock', 75: 'vase', 76: 'scissors', 77: 'teddy bear', 78: 'hair drier',
+            79: 'toothbrush'
+        };
+
+        const COLORS = [
+            '#00ff88', '#00aaff', '#ff6600', '#ff0088', '#ffff00',
+            '#00ffff', '#ff4444', '#aa00ff', '#ff8800', '#00ff44'
+        ];
+
+        let selectedFile = null;
+        let imageElement = null;
+
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const detectBtn = document.getElementById('detectBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const loading = document.getElementById('loading');
+        const error = document.getElementById('error');
+        const results = document.getElementById('results');
+        const stats = document.getElementById('stats');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) handleFile(file);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files[0]) handleFile(e.target.files[0]);
+        });
+
+        function handleFile(file) {
+            selectedFile = file;
+            detectBtn.disabled = false;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                imageElement = new Image();
+                imageElement.onload = () => {
+                    canvas.width = imageElement.width;
+                    canvas.height = imageElement.height;
+                    canvas.style.display = 'block';
+                    ctx.drawImage(imageElement, 0, 0);
+                };
+                imageElement.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+
+            uploadArea.querySelector('p').innerHTML = `Selected: <span>${file.name}</span>`;
+        }
+
+        detectBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            loading.style.display = 'block';
+            error.style.display = 'none';
+            results.innerHTML = '';
+            stats.style.display = 'none';
+            detectBtn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            try {
+                const response = await fetch('/detect', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                ctx.drawImage(imageElement, 0, 0);
+
+                data.detections.forEach((det, i) => {
+                    const color = COLORS[i % COLORS.length];
+                    const [x1, y1, x2, y2] = det.bbox;
+                    const className = COCO_CLASSES[det.class_id] || `class_${det.class_id}`;
+
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+
+                    ctx.fillStyle = color;
+                    ctx.font = 'bold 16px Segoe UI';
+                    const label = `${className} ${(det.confidence * 100).toFixed(0)}%`;
+                    const textWidth = ctx.measureText(label).width;
+                    ctx.fillRect(x1, y1 - 24, textWidth + 10, 24);
+
+                    ctx.fillStyle = '#000';
+                    ctx.fillText(label, x1 + 5, y1 - 6);
+                });
+
+                document.getElementById('totalDetections').textContent = data.num_detections;
+                stats.style.display = 'block';
+                clearBtn.style.display = 'inline-block';
+
+                results.innerHTML = '<h2>Detections</h2>';
+                data.detections.forEach((det, i) => {
+                    const color = COLORS[i % COLORS.length];
+                    const className = COCO_CLASSES[det.class_id] || `class_${det.class_id}`;
+                    results.innerHTML += `
+                        <div class="detection-item" style="border-left-color: ${color}">
+                            <span class="class-name">${className}</span>
+                            <span class="confidence">${(det.confidence * 100).toFixed(1)}%</span>
+                        </div>`;
+                });
+
+            } catch (err) {
+                error.textContent = 'Detection failed. Please try again.';
+                error.style.display = 'block';
+            } finally {
+                loading.style.display = 'none';
+                detectBtn.disabled = false;
+            }
+        });
+
+        clearBtn.addEventListener('click', () => {
+            selectedFile = null;
+            imageElement = null;
+            canvas.style.display = 'none';
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            results.innerHTML = '';
+            stats.style.display = 'none';
+            error.style.display = 'none';
+            detectBtn.disabled = true;
+            clearBtn.style.display = 'none';
+            uploadArea.querySelector('p').innerHTML = `Drag & drop an image here or <span>click to upload</span>`;
+            fileInput.value = '';
+        });
+    </script>
+</body>
+</html>
